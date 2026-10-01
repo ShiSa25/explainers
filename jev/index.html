@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Decision Depot: How Jev Works</title>
+<meta name="description" content="An isometric town that runs one TypeSafe System One call: shared state, Choice, Score, and Noul in parallel, then the code-owned branch. The numbers are a local stub, not hosted Jev." />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+<canvas id="stage"></canvas>
+<div id="tooltip" class="tooltip" hidden></div>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logo" aria-hidden="true"></div>
+    <div class="brand-text">
+      <h1>Decision Depot</h1>
+      <p>One Jev call, laid out as a town, with the fields shown</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <a class="ghost" href="../">All explainers</a>
+    <button id="btn-about" class="ghost" type="button">About &amp; accuracy</button>
+    <button id="btn-panel" class="ghost" type="button" aria-expanded="true">Hide panel</button>
+  </div>
+</header>
+
+<div class="hud" id="hud">
+  <div class="hud-item"><span class="hud-k">Stage</span><span class="hud-v" id="hud-phase">idle</span></div>
+  <div class="hud-item"><span class="hud-k">Model</span><span class="hud-v" id="hud-model">jev-latest</span></div>
+  <div class="hud-item"><span class="hud-k">Answers</span><span class="hud-v" id="hud-answers">0 / 3</span></div>
+  <div class="hud-item"><span class="hud-k">Branch</span><span class="hud-v" id="hud-branch">—</span></div>
+  <div class="hud-note" id="hud-note"></div>
+</div>
+
+<div class="zoomer" id="zoomer">
+  <button id="zoom-in" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+  <button id="zoom-out" type="button" title="Zoom out" aria-label="Zoom out">−</button>
+  <button id="zoom-fit" type="button" title="Show the whole town (or double-click the map)" aria-label="Fit whole town">⤢</button>
+</div>
+
+<aside class="inspector" id="inspector">
+  <button class="sheet-handle" id="sheet-handle" type="button" aria-expanded="false" aria-controls="inspector">
+    <span class="grip" aria-hidden="true"></span>
+    <span class="sheet-label">Details</span>
+  </button>
+
+  <div class="stage-card">
+    <div class="eyebrow">
+      <span class="chip" id="stage-chip">idle</span>
+      <span class="tag" id="stage-tag"></span>
+    </div>
+    <h2 id="stage-name">Press Run to post one call</h2>
+    <p class="lede" id="stage-short">A van leaves App Yard with a support ticket in the bed and comes back with three typed answers.</p>
+    <p class="muted" id="stage-body"></p>
+    <div class="dwell" id="dwell" hidden>
+      <i id="dwell-bar"></i>
+      <span id="dwell-hint">reading stop: press <kbd>Space</kbd> to hold it here</span>
+    </div>
+  </div>
+
+  <section class="sec">
+    <h3>The three answers <span class="hint" id="ans-hint">projected</span></h3>
+    <p class="fine">Choice probabilities. They sum to 1. The highlighted row is the winning key.</p>
+    <div class="bars" id="ans-choice"></div>
+    <p class="fine">Score level probabilities, low to high. The score is the probability-weighted index, so it can sit between rungs.</p>
+    <div class="bars" id="ans-score"></div>
+    <p class="fine">Noul is P(yes). There is no confidence field on this answer.</p>
+    <div class="bars" id="ans-noul"></div>
+  </section>
+
+  <section class="sec">
+    <h3>What your code does</h3>
+    <div class="stats">
+      <div class="stat"><span class="k">choice</span><b id="sum-choice">—</b></div>
+      <div class="stat"><span class="k">Confidence (heuristic)</span><b id="sum-conf">—</b></div>
+      <div class="stat"><span class="k">score</span><b id="sum-score">—</b></div>
+      <div class="stat"><span class="k">noul</span><b id="sum-noul">—</b></div>
+      <div class="stat"><span class="k">Input tokens (est.)</span><b id="sum-in">—</b></div>
+      <div class="stat"><span class="k">Output tokens (est.)</span><b id="sum-out">—</b></div>
+    </div>
+    <p class="fine" id="sum-note"></p>
+    <p class="state-quote" id="state-quote"></p>
+  </section>
+
+  <section class="sec">
+    <h3>Stub features <span class="hint">keyword counts, not Jev</span></h3>
+    <div class="stats" id="feat-list"></div>
+    <p class="fine">Counted from the state string by model.js. A real Jev call does not expose these. They are here so you can see why the softmax moved.</p>
+  </section>
+
+  <section class="sec">
+    <h3>Stations <span class="hint">click to fly there</span></h3>
+    <div class="chips" id="district-chips"></div>
+  </section>
+</aside>
+
+<footer class="dock" id="dock">
+  <div class="dock-row">
+    <div class="group transport">
+      <button id="btn-play" class="icon" type="button" title="Play / pause (space)" aria-label="Play or pause"><span id="play-glyph">❚❚</span></button>
+      <button id="btn-step" class="icon" type="button" title="Next stage (S)" aria-label="Advance one station">⇥</button>
+      <button id="btn-reset" class="icon" type="button" title="Reset and replay the slow tour (R)" aria-label="Reset and replay the slow tour">⟲</button>
+    </div>
+
+    <button id="btn-run" class="primary" type="button" title="New call, keeping what you have already read">Run</button>
+    <button id="btn-tune" class="icon" type="button" title="Show settings" aria-label="Show settings" aria-expanded="false" aria-controls="dock-tune">⚙</button>
+
+    <div class="dock-tune" id="dock-tune">
+      <label class="field slider">
+        <span>Speed <b id="v-speed">1.0×</b></span>
+        <input id="speed" type="range" min="0.4" max="8" step="0.05" value="1" aria-label="Speed" />
+      </label>
+      <label class="field slider">
+        <span>Ticket <b id="v-ticket">Ambiguous</b></span>
+        <input id="ticket" type="range" min="0" max="3" step="1" value="0" aria-label="Ticket" />
+      </label>
+      <label class="field slider">
+        <span>Levels <b id="v-levels">5 levels</b></span>
+        <input id="levels" type="range" min="2" max="10" step="1" value="5" aria-label="Score levels" />
+      </label>
+      <label class="field slider">
+        <span>Review <b id="v-review">under 0.50</b></span>
+        <input id="review" type="range" min="0.02" max="0.95" step="0.01" value="0.50" aria-label="Review if choice confidence under" />
+      </label>
+      <label class="field slider">
+        <span>Escalate <b id="v-escalate">above 0.70</b></span>
+        <input id="escalate" type="range" min="0.05" max="0.99" step="0.01" value="0.70" aria-label="Escalate if noul above" />
+      </label>
+      <div class="group toggles">
+        <label class="toggle"><input id="trim" type="checkbox" checked /><span>Trim</span></label>
+        <label class="toggle"><input id="follow" type="checkbox" checked /><span>Follow</span></label>
+        <label class="toggle"><input id="labels" type="checkbox" checked /><span>Labels</span></label>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<div class="modal" id="about" hidden>
+  <div class="modal-card">
+    <button class="modal-close" id="about-close" type="button" aria-label="Close">×</button>
+    <h2>What this is</h2>
+    <p>Decision Depot is one System One call drawn as a town. A van carries a support ticket from App Yard through the System One Gate, State Bay, and the Question Forge. At the forge, Choice, Score, and Noul are filled together. The van then visits each booth so you can read the card, crosses Wire Yard, and either turns into Review Bay or drives straight to Act Gate. The lamps at the end are your if statements.</p>
+    <p>The bars on the van are the vector it is carrying: keyword counts before the call, then the distribution of the booth it is reading. The crate is the state string. The three cards in the bed appear at the same stop, because one response returned all three.</p>
+
+    <h2>How much of it is real</h2>
+    <p><strong>Mandated shape, computed live in your browser:</strong> the request is <code>model</code>, <code>state</code>, and <code>questions</code>. The three questions share that state and are scored inside one <code>systemOne()</code> call, not three. Choice returns <code>choice</code>, <code>probabilities</code> (they sum to 1), and <code>confidence</code>. Score returns <code>score</code>, <code>probabilities</code>, <code>legend</code>, and <code>confidence</code>, and the score is the probability-weighted level index, so it can fall between rungs. Level count is kept inside 2–10. Noul returns <code>noul</code> in [0, 1] and no confidence field. The response is <code>model</code>, <code>answers</code> keyed by your names, and <code>usage</code>. <code>applyPolicy()</code> is ordinary code: it thresholds noul and choice confidence. The model does not return an action. All of that lives in <code>js/model.js</code>.</p>
+    <p><strong>Scaled down:</strong> four Choice options instead of the API maximum of 255. One string of state instead of an object or array, both of which the API accepts. Five score levels unless you drag the slider. One call, not a batch.</p>
+    <p><strong>Assumed:</strong> the four toy tickets; the footer the Trim toggle appends; a review cutoff of 0.50 and an escalate cutoff of 0.70 (the same figures appear as examples in the TypeSafe docs, and they are still your policy, not Jev’s); the word lists and the logit weights; token counts of characters divided by 4 on the way in and 12 per question on the way out. Those token numbers are marked “est.” on the panel.</p>
+    <p><strong>Pedagogue fake:</strong> real Jev is a trained model at <code>POST https://api.typesafe.ai/v1/systemone</code>. This page never calls it, and it has no API key. Logits are a weighted sum of keyword counts, then a softmax or a sigmoid. Choice and Score confidence is one minus normalized Shannon entropy. TypeSafe derives confidence from the distribution and does not publish the statistic, so do not quote these confidences as Jev’s. The three booths are visited in series so each card can be read; the call itself is parallel, which is why the three cards appear together at the forge. Treat the probabilities as a worked example of the wire. Treat the shared state, the typed answers, and the code-owned branch as the lesson.</p>
+    <p><strong>Scenery:</strong> the sheds, the trees, the road paint. The post heights, the ramp bead, the dial needle, the crate, and the lamps are the numbers. The rest is the town those numbers needed somewhere to happen.</p>
+
+    <h2>Pacing</h2>
+    <p>The first time the van reaches a station it stops for long enough to read that station’s write-up — between 9 and 26 seconds — and the bar under the text shows how much of the stop is left. Once every district on the trip has been explained, later runs go faster. <b>Space</b> holds a stop, <b>S</b> steps one station, and Speed scales everything, reading stops included. <b>Reset</b> (⟲) replays the slow tour. <b>Run</b> keeps what you have already read.</p>
+
+    <h2>Controls</h2>
+    <ul>
+      <li><b>Space</b> play / pause · <b>S</b> advance one station · <b>R</b> reset and replay the tour · <b>F</b> follow camera · <b>L</b> labels</li>
+      <li>Drag to pan, scroll to zoom, click a station for its write-up. Escape closes this panel.</li>
+      <li>The view starts close on the van. The <b>⤢</b> button, or a double-click, pulls back to the whole town.</li>
+    </ul>
+    <p class="fine">Built from the isometric-explainer skill. Wire shapes follow the Jev brief and docs.typesafe.ai. The stub is original.</p>
+  </div>
+</div>
+
+<script src="js/iso.js"></script>
+<script src="js/model.js"></script>
+<script src="js/world.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
